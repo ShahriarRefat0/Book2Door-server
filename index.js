@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const app = express();
-const port = 3000 || process.env.PORT;
+const port = process.env.PORT || 3000;
 
 //middleware
 app.use(cors());
@@ -26,6 +26,26 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
+    const db = client.db("Bood2Door");
+    const booksCollection = db.collection("books");
+
+    //books related api
+    app.get("/books", async (req, res) => {
+      const result = await booksCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post('/books', async (req, res) => {
+      const newBook = req.body;
+      console.log('Adding new book:', newBook);
+      const result = await booksCollection.insertOne(newBook);
+      res.send(result);
+    })
+
+
+
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
