@@ -39,6 +39,9 @@ async function run() {
     // await client.connect();
     const db = client.db("Bood2Door");
     const booksCollection = db.collection("books");
+    const ordersCollection = db.collection('orders');
+
+
 
     //add book
     app.post("/books", async (req, res) => {
@@ -99,21 +102,58 @@ async function run() {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       // console.log(session);
 const book = await booksCollection.findOne({ _id: new ObjectId(session.metadata.bookId) });
-      if (session.status === 'complete') {
+      const order = await ordersCollection.findOne({
+        transactionId: session.payment_intent,
+      });
+      
+      if (session.status === 'complete' && book && !order) {
         //save order data in db
         const orderInfo = {
           bookId: session.metadata.bookId,
           transactionId: session.payment_intent,
           customer: session.metadata.customer,
           status: 'pending',
+          librarian: book.librarian,
           name: book.name,
           quantity: 1,
           price: session.amount_total / 100,
           
         }
+        console.log(orderInfo);
+        const result = await ordersCollection.insertOne(orderInfo);
+        //update book stock
+
+        await booksCollection.updateOne({
+          _id: new ObjectId(session.metadata.bookId),
+        },
+          {$inc: {quantity:-1}}
+        );
+        return res.send({
+          transactionId: session.payment_intent, orderId: result.insertedId 
+        });
       }
-      res.send(session);
+      res.send(
+        res.send({
+          transactionId: session.payment_intent,
+          orderId: order,
+        })
+      );
     });
+
+    //get all orders of a user
+    app.get('/orders/:email', async (req, res) => {
+      const email = req.params.email;
+      const result = await ordersCollection.find({ customer: email }).toArray();
+      res.send(result);
+    })
+    //get all orders of a librarian 
+    app.get('/manage-orders/:email', async (req, res) => {
+      const email = req.params.email;
+      const result = await ordersCollection
+        .find({ 'librarian.email': email })
+        .toArray();
+      res.send(result);
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
