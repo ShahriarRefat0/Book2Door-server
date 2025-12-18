@@ -112,14 +112,15 @@ const book = await booksCollection.findOne({ _id: new ObjectId(session.metadata.
           bookId: session.metadata.bookId,
           transactionId: session.payment_intent,
           customer: session.metadata.customer,
-          status: 'pending',
+          orderStatus: 'pending',
           librarian: book.librarian,
-          name: book.name,
+          name: book.title,
           quantity: 1,
           price: session.amount_total / 100,
+          createAt: new Date(),
           
         }
-        console.log(orderInfo);
+        // console.log(orderInfo);
         const result = await ordersCollection.insertOne(orderInfo);
         //update book stock
 
@@ -140,17 +141,32 @@ const book = await booksCollection.findOne({ _id: new ObjectId(session.metadata.
       );
     });
 
+    //orders related api
+    app.post('/orders', async (req, res) => {
+      const order = req.body;
+      const result = await ordersCollection.insertOne(order);
+      res.send(result);
+    })
+
     //get all orders of a user
     app.get('/orders/:email', async (req, res) => {
       const email = req.params.email;
-      const result = await ordersCollection.find({ customer: email }).toArray();
+      const result = await ordersCollection.find({ "customer.email": email }).toArray();
       res.send(result);
     })
     //get all orders of a librarian 
     app.get('/manage-orders/:email', async (req, res) => {
       const email = req.params.email;
       const result = await ordersCollection
-        .find({ 'librarian.email': email })
+        .find({ "librarian.email": email })
+        .toArray();
+      res.send(result);
+    })
+    //get all books of a librarian 
+    app.get('/my-inventory/:email', async (req, res) => {
+      const email = req.params.email;
+      const result = await booksCollection
+        .find({ "librarian.email": email })
         .toArray();
       res.send(result);
     })
