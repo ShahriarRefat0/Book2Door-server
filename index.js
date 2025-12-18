@@ -51,7 +51,23 @@ async function run() {
 
     //books related api
     app.get("/books", async (req, res) => {
-      const result = await booksCollection.find().toArray();
+      const { status } = req.query;
+      const query = status ? { status: status } : {};
+      const result = await booksCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    app.get("/latest-books/", async (req, res) => {
+      const { status } = req.query;
+
+      const query = status ? { status } : {};
+
+      const result = await booksCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .limit(4)
+        .toArray();
+
       res.send(result);
     });
 
@@ -146,7 +162,6 @@ async function run() {
     //   );
     // });
 
-
     app.post("/payment-success", async (req, res) => {
       const { sessionId } = req.body;
 
@@ -172,14 +187,12 @@ async function run() {
       res.send({ success: true });
     });
 
-
     //create orders api
     app.post("/orders", async (req, res) => {
       const order = req.body;
       const result = await ordersCollection.insertOne(order);
       res.send(result);
     });
-
 
     //get all orders of a user
     app.get("/orders/:email", async (req, res) => {
@@ -190,22 +203,13 @@ async function run() {
       res.send(result);
     });
 
-    //cancel order 
-    app.patch('/orders/cancel/:id', async (req, res) => {
+    //cancel order
+    app.patch("/orders/cancel/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await ordersCollection.updateOne(query, {
         $set: { orderStatus: "cancelled" },
       });
-    })
-
-    //get all orders of a librarian
-    app.get("/manage-orders/:email", async (req, res) => {
-      const email = req.params.email;
-      const result = await ordersCollection
-        .find({ "librarian.email": email })
-        .toArray();
-      res.send(result);
     });
 
     //get all books of a librarian
@@ -217,8 +221,45 @@ async function run() {
       res.send(result);
     });
 
+    //get book for edit
+    app.get("/my-inventory/book/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await booksCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
 
+    //update book data
+    app.patch("/my-inventory/book/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedBook = req.body;
+      const query = { _id: new ObjectId(id) };
+      const result = await booksCollection.updateOne(query, {
+        $set: {
+          title: updatedBook.title,
+          author: updatedBook.author,
+          price: updatedBook.price,
+          status: updatedBook.status,
+          description: updatedBook.description,
+          image: updatedBook.image,
+          updatedAt: updatedBook.updatedAt,
+          category: updatedBook.category,
+          quantity: updatedBook.quantity,
+          tags: updatedBook.tags,
+        },
+      });
+      res.send(result);
+    });
 
+    //get all orders of a librarian
+    app.get("/manage-orders/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await ordersCollection
+        .find({ "librarian.email": email })
+        .toArray();
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
