@@ -39,9 +39,7 @@ async function run() {
     // await client.connect();
     const db = client.db("Bood2Door");
     const booksCollection = db.collection("books");
-    const ordersCollection = db.collection('orders');
-
-
+    const ordersCollection = db.collection("orders");
 
     //add book
     app.post("/books", async (req, res) => {
@@ -87,6 +85,7 @@ async function run() {
         customer_email: paymentInfo?.customer.email,
         mode: "payment",
         metadata: {
+          orderId: paymentInfo?.orderId,
           bookId: paymentInfo?.bookId,
           customer: paymentInfo?.customer.email,
         },
@@ -97,79 +96,129 @@ async function run() {
       res.send({ url: session.url });
     });
 
-    app.post("/payment-success", async (req, res) => {
-      const { sessionId } = req.body
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-      // console.log(session);
-const book = await booksCollection.findOne({ _id: new ObjectId(session.metadata.bookId) });
-      const order = await ordersCollection.findOne({
-        transactionId: session.payment_intent,
-      });
-      
-      if (session.status === 'complete' && book && !order) {
-        //save order data in db
-        const orderInfo = {
-          bookId: session.metadata.bookId,
-          transactionId: session.payment_intent,
-          customer: session.metadata.customer,
-          orderStatus: 'pending',
-          librarian: book.librarian,
-          name: book.title,
-          quantity: 1,
-          price: session.amount_total / 100,
-          createAt: new Date(),
-          
-        }
-        // console.log(orderInfo);
-        const result = await ordersCollection.insertOne(orderInfo);
-        //update book stock
+    //payment success api
+    // app.patch("/payment-success", async (req, res) => {
+    //   const { sessionId } = req.body;
+    //   const session = await stripe.checkout.sessions.retrieve(sessionId);
+    //   // console.log(session);
+    //   const book = await booksCollection.findOne({
+    //     _id: new ObjectId(session.metadata.bookId),
+    //   });
+    //   const order = await ordersCollection.findOne({
+    //     transactionId: session.payment_intent,
+    //   });
 
-        await booksCollection.updateOne({
-          _id: new ObjectId(session.metadata.bookId),
-        },
-          {$inc: {quantity:-1}}
-        );
-        return res.send({
-          transactionId: session.payment_intent, orderId: result.insertedId 
-        });
+    //   if (session.status === "complete" && book && !order) {
+    //     //save order data in db
+    //     const orderInfo = {
+    //       bookId: session.metadata.bookId,
+    //       transactionId: session.payment_intent,
+    //       customer: session.metadata.customer,
+    //       orderStatus: "pending",
+    //       payment_status: "paid",
+    //       customer: book.customer,
+    //       librarian: book.librarian,
+    //       name: book.title,
+    //       quantity: 1,
+    //       price: session.amount_total / 100,
+    //       paidAt: new Date(),
+    //     };
+    //     console.log(orderInfo);
+    //     const result = await ordersCollection.insertOne(orderInfo);
+    //     //update book stock
+
+    //     await booksCollection.updateOne(
+    //       {
+    //         _id: new ObjectId(session.metadata.bookId),
+    //       },
+    //       { $inc: { quantity: -1 } }
+    //     );
+    //     return res.send({
+    //       transactionId: session.payment_intent,
+    //       orderId: result.insertedId,
+    //     });
+    //   }
+    //   res.send(
+    //     res.send({
+    //       transactionId: session.payment_intent,
+    //       orderId: order,
+    //     })
+    //   );
+    // });
+
+
+    app.post("/payment-success", async (req, res) => {
+      const { sessionId } = req.body;
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status !== "paid") {
+        return res.status(400).send({ message: "Payment not completed" });
       }
-      res.send(
-        res.send({
-          transactionId: session.payment_intent,
-          orderId: order,
-        })
+
+      const orderId = session.metadata.orderId;
+
+      const result = await ordersCollection.updateOne(
+        { _id: new ObjectId(orderId) },
+        {
+          $set: {
+            paymentStatus: "paid",
+            transactionId: session.payment_intent,
+            paidAt: new Date(),
+          },
+        }
       );
+
+      res.send({ success: true });
     });
 
-    //orders related api
-    app.post('/orders', async (req, res) => {
+
+    //create orders api
+    app.post("/orders", async (req, res) => {
       const order = req.body;
       const result = await ordersCollection.insertOne(order);
       res.send(result);
-    })
+    });
+
 
     //get all orders of a user
-    app.get('/orders/:email', async (req, res) => {
+    app.get("/orders/:email", async (req, res) => {
       const email = req.params.email;
-      const result = await ordersCollection.find({ "customer.email": email }).toArray();
+      const result = await ordersCollection
+        .find({ "customer.email": email })
+        .toArray();
       res.send(result);
+    });
+
+    //cancel order 
+    app.patch('/orders/cancel/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await ordersCollection.updateOne(query, {
+        $set: { orderStatus: "cancelled" },
+      });
     })
-    //get all orders of a librarian 
-    app.get('/manage-orders/:email', async (req, res) => {
+
+    //get all orders of a librarian
+    app.get("/manage-orders/:email", async (req, res) => {
       const email = req.params.email;
       const result = await ordersCollection
         .find({ "librarian.email": email })
         .toArray();
       res.send(result);
-    })
-    //get all books of a librarian 
-    app.get('/my-inventory/:email', async (req, res) => {
+    });
+
+    //get all books of a librarian
+    app.get("/my-inventory/:email", async (req, res) => {
       const email = req.params.email;
       const result = await booksCollection
         .find({ "librarian.email": email })
         .toArray();
       res.send(result);
-    })
+    });
+
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
