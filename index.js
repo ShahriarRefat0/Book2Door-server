@@ -104,11 +104,10 @@ async function run() {
     })
 
     //update user role
-    app.patch('/user/role/:id', async (req, res) => {
-      const id = req.params.id;
-      const { role } = req.body;
-      const query = { _id: new ObjectId(id) };
-      const result = await usersCollection.updateOne(query, {
+    app.patch('/update-role', verifyJWT,  async (req, res) => {
+     
+      const {email, role } = req.body;
+      const result = await usersCollection.updateOne({email}, {
         $set: {role},
       })
       res.send(result);
