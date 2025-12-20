@@ -17,8 +17,29 @@ admin.initializeApp({
 });
 
 //middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    credentials: true,
+  })
+);
 app.use(express.json());
+
+// jwt middlewares
+const verifyJWT = async (req, res, next) => {
+  const token = req?.headers?.authorization?.split(" ")[1];
+  console.log(token);
+  if (!token) return res.status(401).send({ message: "Unauthorized Access!" });
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.tokenEmail = decoded.email;
+    console.log(decoded);
+    next();
+  } catch (err) {
+    console.log(err);
+    return res.status(401).send({ message: "Unauthorized Access!", err });
+  }
+};
 
 app.get("/", (req, res) => {
   res.send("Book2Door Server is running");
@@ -40,6 +61,58 @@ async function run() {
     const db = client.db("Bood2Door");
     const booksCollection = db.collection("books");
     const ordersCollection = db.collection("orders");
+    const usersCollection = db.collection("users");
+
+    //user related api
+    app.post("/user", async (req, res) => {
+      const userData = req.body;
+      userData.createdAt = new Date().toISOString();
+      userData.last_loggedIn = new Date().toISOString();
+      userData.role = "customer";
+      const query = { email: userData.email };
+      const alreadyExists = await usersCollection.findOne({
+        email: userData.email,
+      });
+      console.log("userAlreadyExists", !!alreadyExists);
+      if (alreadyExists) {
+        console.log("update user info.....");
+        const result = await usersCollection.updateOne(query, {
+          $set: {
+            last_loggedIn: new Date().toISOString(),
+          },
+        });
+        return res.send(result);
+      }
+
+      console.log("saving new user......");
+      const result = await usersCollection.insertOne(userData);
+      res.send(result);
+    });
+
+    //get a users role
+    app.get("/user/role", verifyJWT, async (req, res) => {
+      const email = req.tokenEmail;
+      // console.log("get user role for:", email);
+      const result = await usersCollection.findOne({ email });
+      res.send({ role: result?.role });
+    });
+
+    //get all users
+    app.get('/users', async (req, res) => {
+      const result = await usersCollection.find({}).toArray();
+      res.send(result);
+    })
+
+    //update user role
+    app.patch('/user/role/:id', async (req, res) => {
+      const id = req.params.id;
+      const { role } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const result = await usersCollection.updateOne(query, {
+        $set: {role},
+      })
+      res.send(result);
+    })
 
     //add book
     app.post("/books", async (req, res) => {
@@ -195,8 +268,8 @@ async function run() {
     });
 
     //get all orders of a user
-    app.get("/orders/:email", async (req, res) => {
-      const email = req.params.email;
+    app.get("/orders", verifyJWT, async (req, res) => {
+      const email = req.tokenEmail;
       const result = await ordersCollection
         .find({ "customer.email": email })
         .toArray();
@@ -210,6 +283,7 @@ async function run() {
       const result = await ordersCollection.updateOne(query, {
         $set: { orderStatus: "cancelled" },
       });
+      res.send(result);
     });
 
     //get all books of a librarian
