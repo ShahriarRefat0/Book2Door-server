@@ -98,8 +98,9 @@ async function run() {
     });
 
     //get all users
-    app.get('/users', async (req, res) => {
-      const result = await usersCollection.find({}).toArray();
+    app.get('/users', verifyJWT, async (req, res) => {
+      const adminEmail = req.tokenEmail;
+      const result = await usersCollection.find({email: {$ne: adminEmail}}).toArray();
       res.send(result);
     })
 
