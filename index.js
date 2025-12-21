@@ -112,6 +112,32 @@ async function run() {
       })
     })
 
+    app.get('/customer-statistics', verifyJWT, async (req, res) => {
+      const email = req.tokenEmail;
+      const totalOrders = await ordersCollection.countDocuments({ "customer.email": email });
+
+      const activeOrders = await ordersCollection.countDocuments({ "customer.email": email, orderStatus: 'shipped' });
+
+      const spentCursor = ordersCollection.aggregate([
+        { $match: { "customer.email": email, paymentStatus: "paid" } },
+        {
+          $group: {
+            _id: null,
+            totalSpent: { $sum: { $toDouble: "$price" } }, // Converts string to number
+          },
+        },
+      ]);
+      const spentResult = await spentCursor.toArray();
+      const totalSpent = spentResult[0]?.totalSpent || 0;
+
+      res.send({
+        totalOrders,
+        activeOrders,
+        totalSpent,
+        
+      });
+    });
+
     //user related api
     app.post("/user", async (req, res) => {
       const userData = req.body;
