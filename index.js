@@ -63,6 +63,55 @@ async function run() {
     const ordersCollection = db.collection("orders");
     const usersCollection = db.collection("users");
 
+    //role middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.tokenEmail;
+      const user = await usersCollection.findOne({ email });
+      if ( user?.role !== 'admin') {
+        return res.status(403).send({message: "Admin Access Required"});  
+      }
+      next();
+    }
+
+      const verifyLibrarian = async (req, res, next) => {
+        const email = req.tokenEmail;
+        const user = await usersCollection.findOne({ email });
+        if (user?.role !== "librarian") {
+          return res.status(403).send({ message: "Librarian Access Required" });
+        }
+        next();
+      };
+
+
+
+    //statistics api
+    app.get('/admin-statistics', async (req, res) => {
+      const totalBooks = await booksCollection.estimatedDocumentCount();
+      const totalOrders = await ordersCollection.estimatedDocumentCount();
+      const totalUsers = await usersCollection.estimatedDocumentCount();
+      const totalPendingOrders = await ordersCollection.countDocuments({ orderStatus: 'pending' }); 
+      
+   const revenueCursor = ordersCollection.aggregate([
+     { $match: { paymentStatus: "paid" } },
+     {
+       $group: {
+         _id: null,
+         totalRevenue: { $sum: { $toDouble: "$price" } }, // Converts string to number
+       },
+     },
+   ]);
+      const revenueResult = await revenueCursor.toArray();
+      const totalRevenue = revenueResult[0]?.totalRevenue || 0;
+
+      res.send({
+        totalBooks,
+        totalOrders,
+        totalUsers,
+        totalPendingOrders,
+        totalRevenue,
+      })
+    })
+
     //user related api
     app.post("/user", async (req, res) => {
       const userData = req.body;
@@ -98,14 +147,14 @@ async function run() {
     });
 
     //get all users
-    app.get('/users', verifyJWT, async (req, res) => {
+    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
       const adminEmail = req.tokenEmail;
       const result = await usersCollection.find({email: {$ne: adminEmail}}).toArray();
       res.send(result);
     })
 
     //update user role
-    app.patch('/update-role', verifyJWT,  async (req, res) => {
+    app.patch('/update-role', verifyJWT, verifyAdmin, async (req, res) => {
      
       const {email, role } = req.body;
       const result = await usersCollection.updateOne({email}, {
@@ -115,7 +164,7 @@ async function run() {
     })
 
     //add book
-    app.post("/books", async (req, res) => {
+    app.post("/books", verifyJWT, verifyLibrarian, async (req, res) => {
       const newBook = req.body;
       // console.log("Adding new book:", newBook);
       const result = await booksCollection.insertOne(newBook);
@@ -145,7 +194,7 @@ async function run() {
     });
 
     //get book details
-    app.get("/books/:id", async (req, res) => {
+    app.get("/books/:id", verifyJWT, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await booksCollection.findOne(query);
@@ -153,7 +202,7 @@ async function run() {
     });
 
     //PAYMENT INTEGRATION
-    app.post("/create-checkout-session", async (req, res) => {
+    app.post("/create-checkout-session", verifyJWT, async (req, res) => {
       const paymentInfo = req.body;
 
       const session = await stripe.checkout.sessions.create({
@@ -235,7 +284,7 @@ async function run() {
     //   );
     // });
 
-    app.post("/payment-success", async (req, res) => {
+    app.post("/payment-success", verifyJWT, async (req, res) => {
       const { sessionId } = req.body;
 
       const session = await stripe.checkout.sessions.retrieve(sessionId);
@@ -261,7 +310,7 @@ async function run() {
     });
 
     //create orders api
-    app.post("/orders", async (req, res) => {
+    app.post("/orders", verifyJWT, async (req, res) => {
       const order = req.body;
       const result = await ordersCollection.insertOne(order);
       res.send(result);
@@ -277,7 +326,7 @@ async function run() {
     });
 
     //cancel order
-    app.patch("/orders/cancel/:id", async (req, res) => {
+    app.patch("/orders/cancel/:id", verifyJWT, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await ordersCollection.updateOne(query, {
@@ -287,7 +336,7 @@ async function run() {
     });
 
     //get all books of a librarian
-    app.get("/my-inventory/:email", async (req, res) => {
+    app.get("/my-inventory/:email", verifyJWT, verifyLibrarian, async (req, res) => {
       const email = req.params.email;
       const result = await booksCollection
         .find({ "librarian.email": email })
@@ -296,7 +345,7 @@ async function run() {
     });
 
     //get book for edit
-    app.get("/my-inventory/book/:id", async (req, res) => {
+    app.get("/my-inventory/book/:id", verifyJWT, verifyLibrarian, async (req, res) => {
       const id = req.params.id;
       const result = await booksCollection.findOne({
         _id: new ObjectId(id),
@@ -305,7 +354,7 @@ async function run() {
     });
 
     //update book data
-    app.patch("/my-inventory/book/:id", async (req, res) => {
+    app.patch("/my-inventory/book/:id", verifyJWT, verifyLibrarian, async (req, res) => {
       const { id } = req.params;
       const updatedBook = req.body;
       const query = { _id: new ObjectId(id) };
@@ -327,7 +376,7 @@ async function run() {
     });
 
     //get all orders of a librarian
-    app.get("/manage-orders/:email", async (req, res) => {
+    app.get("/manage-orders/:email", verifyJWT, verifyLibrarian, async (req, res) => {
       const email = req.params.email;
       const result = await ordersCollection
         .find({ "librarian.email": email })
