@@ -138,6 +138,34 @@ async function run() {
       });
     });
 
+
+    app.get("/librarian-statistics", async (req, res) => {
+      const email = req.tokenEmail;
+      const totalBooks = await booksCollection.countDocuments({ "librarian.email": email });
+      const totalOrders = await ordersCollection.countDocuments({ "librarian.email": email });
+         const shippedOrders = await ordersCollection.countDocuments({
+           "customer.email": email,
+           orderStatus: "shipped",
+         });
+      const revenueCursor = ordersCollection.aggregate([
+        { $match: { "librarian.email": email, paymentStatus: "paid" } },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: { $toDouble: "$price" } }, // Converts string to number
+          }
+        }
+      ])
+      const revenueResult = await revenueCursor.toArray();
+      const totalRevenue = revenueResult[0]?.totalRevenue || 0;
+      res.send({
+        totalBooks,
+        totalOrders,
+        shippedOrders,
+        totalRevenue,
+      });
+    });
+
     //user related api
     app.post("/user", async (req, res) => {
       const userData = req.body;
