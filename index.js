@@ -289,7 +289,7 @@ async function run() {
       res.send({ url: session.url });
     });
 
-  
+  //payment success api
     app.post("/payment-success", verifyJWT, async (req, res) => {
       const { sessionId } = req.body;
 
@@ -315,6 +315,16 @@ async function run() {
       res.send({ success: true });
     });
 
+    //payment history
+    app.get("/payments", verifyJWT, async (req, res) => {
+      const email = req.tokenEmail;
+      const query = { 'customer.email': email, paymentStatus: "paid"} 
+      const result = await ordersCollection
+        .find(query)
+        .toArray();
+      res.send(result);
+    });
+
     //create orders api
     app.post("/orders", verifyJWT, async (req, res) => {
       const order = req.body;
@@ -323,7 +333,7 @@ async function run() {
     });
 
     //get all orders of a user
-    app.get("/orders", verifyJWT, verifyLibrarian, async (req, res) => {
+    app.get("/orders", verifyJWT, async (req, res) => {
       const email = req.tokenEmail;
       const result = await ordersCollection
         .find({ "customer.email": email })
