@@ -112,6 +112,7 @@ async function run() {
       })
     })
 
+    //customer statistics
     app.get('/customer-statistics', verifyJWT, async (req, res) => {
       const email = req.tokenEmail;
       const totalOrders = await ordersCollection.countDocuments({ "customer.email": email });
@@ -138,7 +139,7 @@ async function run() {
       });
     });
 
-
+//librarian statistics
     app.get("/librarian-statistics", async (req, res) => {
       const email = req.tokenEmail;
       const totalBooks = await booksCollection.countDocuments({ "librarian.email": email });
@@ -178,7 +179,7 @@ async function run() {
       });
       console.log("userAlreadyExists", !!alreadyExists);
       if (alreadyExists) {
-        console.log("update user info.....");
+        // console.log("update user info.....");
         const result = await usersCollection.updateOne(query, {
           $set: {
             last_loggedIn: new Date().toISOString(),
@@ -187,7 +188,7 @@ async function run() {
         return res.send(result);
       }
 
-      console.log("saving new user......");
+      // console.log("saving new user......");
       const result = await usersCollection.insertOne(userData);
       res.send(result);
     });
@@ -288,56 +289,7 @@ async function run() {
       res.send({ url: session.url });
     });
 
-    //payment success api
-    // app.patch("/payment-success", async (req, res) => {
-    //   const { sessionId } = req.body;
-    //   const session = await stripe.checkout.sessions.retrieve(sessionId);
-    //   // console.log(session);
-    //   const book = await booksCollection.findOne({
-    //     _id: new ObjectId(session.metadata.bookId),
-    //   });
-    //   const order = await ordersCollection.findOne({
-    //     transactionId: session.payment_intent,
-    //   });
-
-    //   if (session.status === "complete" && book && !order) {
-    //     //save order data in db
-    //     const orderInfo = {
-    //       bookId: session.metadata.bookId,
-    //       transactionId: session.payment_intent,
-    //       customer: session.metadata.customer,
-    //       orderStatus: "pending",
-    //       payment_status: "paid",
-    //       customer: book.customer,
-    //       librarian: book.librarian,
-    //       name: book.title,
-    //       quantity: 1,
-    //       price: session.amount_total / 100,
-    //       paidAt: new Date(),
-    //     };
-    //     console.log(orderInfo);
-    //     const result = await ordersCollection.insertOne(orderInfo);
-    //     //update book stock
-
-    //     await booksCollection.updateOne(
-    //       {
-    //         _id: new ObjectId(session.metadata.bookId),
-    //       },
-    //       { $inc: { quantity: -1 } }
-    //     );
-    //     return res.send({
-    //       transactionId: session.payment_intent,
-    //       orderId: result.insertedId,
-    //     });
-    //   }
-    //   res.send(
-    //     res.send({
-    //       transactionId: session.payment_intent,
-    //       orderId: order,
-    //     })
-    //   );
-    // });
-
+  
     app.post("/payment-success", verifyJWT, async (req, res) => {
       const { sessionId } = req.body;
 
@@ -371,7 +323,7 @@ async function run() {
     });
 
     //get all orders of a user
-    app.get("/orders", verifyJWT, async (req, res) => {
+    app.get("/orders", verifyJWT, verifyLibrarian, async (req, res) => {
       const email = req.tokenEmail;
       const result = await ordersCollection
         .find({ "customer.email": email })
@@ -395,6 +347,30 @@ async function run() {
       const result = await booksCollection
         .find({ "librarian.email": email })
         .toArray();
+      res.send(result);
+    });
+
+    //get all books for a admin
+    app.get('/admin-inventory', verifyJWT, verifyAdmin, async (req, res) => {
+      const result = await booksCollection.find().toArray();
+      res.send(result);
+    })
+
+    //admin delete any book
+    app.delete('/admin-inventory/book/:id', verifyJWT, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const result = await booksCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    })
+
+    //change book status
+    app.patch("/update-status/:id", verifyJWT, verifyAdmin, async (req, res) => { 
+      const { id } = req.params;
+      const { status } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const result = await booksCollection.updateOne(query, {
+        $set: { status },
+      });
       res.send(result);
     });
 
