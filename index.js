@@ -67,50 +67,50 @@ async function run() {
     const verifyAdmin = async (req, res, next) => {
       const email = req.tokenEmail;
       const user = await usersCollection.findOne({ email });
-      if ( user?.role !== 'admin') {
-        return res.status(403).send({message: "Admin Access Required"});  
+      if (user?.role !== "admin") {
+        return res.status(403).send({ message: "Admin Access Required" });
       }
       next();
-    }
+    };
 
     //librarian role middleware
-      const verifyLibrarian = async (req, res, next) => {
-        const email = req.tokenEmail;
-        const user = await usersCollection.findOne({ email });
-        if (user?.role !== "librarian") {
-          return res.status(403).send({ message: "Librarian Access Required" });
-        }
-        next();
+    const verifyLibrarian = async (req, res, next) => {
+      const email = req.tokenEmail;
+      const user = await usersCollection.findOne({ email });
+      if (user?.role !== "librarian") {
+        return res.status(403).send({ message: "Librarian Access Required" });
+      }
+      next();
     };
-    
+
     //customer role middleware
-      const verifyCustomer = async (req, res, next) => {
-        const email = req.tokenEmail;
-        const user = await usersCollection.findOne({ email });
-        if (user?.role !== "customer") {
-          return res.status(403).send({ message: "Customer Access Required" });
-        }
-        next();
-      };
-
-
+    const verifyCustomer = async (req, res, next) => {
+      const email = req.tokenEmail;
+      const user = await usersCollection.findOne({ email });
+      if (user?.role !== "customer") {
+        return res.status(403).send({ message: "Customer Access Required" });
+      }
+      next();
+    };
 
     //statistics api
-    app.get('/admin-statistics', verifyJWT, verifyAdmin, async (req, res) => {
+    app.get("/admin-statistics", verifyJWT, verifyAdmin, async (req, res) => {
       const totalBooks = await booksCollection.estimatedDocumentCount();
       const totalOrders = await ordersCollection.estimatedDocumentCount();
       const totalUsers = await usersCollection.estimatedDocumentCount();
-      const totalPendingOrders = await ordersCollection.countDocuments({ orderStatus: 'pending' }); 
-      
-   const revenueCursor = ordersCollection.aggregate([
-     { $match: { paymentStatus: "paid" } },
-     {
-       $group: {
-         _id: null,
-         totalRevenue: { $sum: { $toDouble: "$price" } }, // Converts string to number
-       },
-     },
-   ]);
+      const totalPendingOrders = await ordersCollection.countDocuments({
+        orderStatus: "pending",
+      });
+
+      const revenueCursor = ordersCollection.aggregate([
+        { $match: { paymentStatus: "paid" } },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: { $toDouble: "$price" } }, // Converts string to number
+          },
+        },
+      ]);
       const revenueResult = await revenueCursor.toArray();
       const totalRevenue = revenueResult[0]?.totalRevenue || 0;
 
@@ -120,78 +120,96 @@ async function run() {
         totalUsers,
         totalPendingOrders,
         totalRevenue,
-      })
-    })
+      });
+    });
 
     //customer statistics
-    app.get('/customer-statistics', verifyJWT, verifyCustomer, async (req, res) => {
-      const email = req.tokenEmail;
-      const totalOrders = await ordersCollection.countDocuments({ "customer.email": email });
+    app.get(
+      "/customer-statistics",
+      verifyJWT,
+      verifyCustomer,
+      async (req, res) => {
+        const email = req.tokenEmail;
+        const totalOrders = await ordersCollection.countDocuments({
+          "customer.email": email,
+        });
 
-      const activeOrders = await ordersCollection.countDocuments({ "customer.email": email, orderStatus: 'shipped' });
+        const activeOrders = await ordersCollection.countDocuments({
+          "customer.email": email,
+          orderStatus: "shipped",
+        });
 
-      const spentCursor = ordersCollection.aggregate([
-        { $match: { "customer.email": email, paymentStatus: "paid" } },
-        {
-          $group: {
-            _id: null,
-            totalSpent: { $sum: { $toDouble: "$price" } }, // Converts string to number
+        const spentCursor = ordersCollection.aggregate([
+          { $match: { "customer.email": email, paymentStatus: "paid" } },
+          {
+            $group: {
+              _id: null,
+              totalSpent: { $sum: { $toDouble: "$price" } }, // Converts string to number
+            },
           },
-        },
-      ]);
-      const spentResult = await spentCursor.toArray();
-      const totalSpent = spentResult[0]?.totalSpent || 0;
+        ]);
+        const spentResult = await spentCursor.toArray();
+        const totalSpent = spentResult[0]?.totalSpent || 0;
 
-      res.send({
-        totalOrders,
-        activeOrders,
-        totalSpent,
-        
-      });
-    });
+        res.send({
+          totalOrders,
+          activeOrders,
+          totalSpent,
+        });
+      }
+    );
 
-//librarian statistics
-    app.get("/librarian-statistics", verifyJWT, verifyLibrarian, async (req, res) => {
-      const email = req.tokenEmail;
-      const totalBooks = await booksCollection.countDocuments({ "librarian.email": email });
-      const totalOrders = await ordersCollection.countDocuments({ "librarian.email": email });
-         const shippedOrders = await ordersCollection.countDocuments({
-           "librarian.email": email,
-           orderStatus: "shipped",
-         });
-         const pendingOrders = await ordersCollection.countDocuments({
-           "librarian.email": email,
-           orderStatus: "pending",
-         });
-         const deliveredOrders = await ordersCollection.countDocuments({
-           "librarian.email": email,
-           orderStatus: "delivered",
-         });
-         const cancelledOrders = await ordersCollection.countDocuments({
-           "librarian.email": email,
-           orderStatus: "cancelled",
-         });
-      const revenueCursor = ordersCollection.aggregate([
-        { $match: { "librarian.email": email, paymentStatus: "paid" } },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: { $toDouble: "$price" } }, // Converts string to number
-          }
-        }
-      ])
-      const revenueResult = await revenueCursor.toArray();
-      const totalRevenue = revenueResult[0]?.totalRevenue || 0;
-      res.send({
-        totalBooks,
-        totalOrders,
-        shippedOrders,
-        totalRevenue,
-        pendingOrders,
-        deliveredOrders,
-        cancelledOrders,
-      });
-    });
+    //librarian statistics
+    app.get(
+      "/librarian-statistics",
+      verifyJWT,
+      verifyLibrarian,
+      async (req, res) => {
+        const email = req.tokenEmail;
+        const totalBooks = await booksCollection.countDocuments({
+          "librarian.email": email,
+        });
+        const totalOrders = await ordersCollection.countDocuments({
+          "librarian.email": email,
+        });
+        const shippedOrders = await ordersCollection.countDocuments({
+          "librarian.email": email,
+          orderStatus: "shipped",
+        });
+        const pendingOrders = await ordersCollection.countDocuments({
+          "librarian.email": email,
+          orderStatus: "pending",
+        });
+        const deliveredOrders = await ordersCollection.countDocuments({
+          "librarian.email": email,
+          orderStatus: "delivered",
+        });
+        const cancelledOrders = await ordersCollection.countDocuments({
+          "librarian.email": email,
+          orderStatus: "cancelled",
+        });
+        const revenueCursor = ordersCollection.aggregate([
+          { $match: { "librarian.email": email, paymentStatus: "paid" } },
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: { $toDouble: "$price" } },
+            },
+          },
+        ]);
+        const revenueResult = await revenueCursor.toArray();
+        const totalRevenue = revenueResult[0]?.totalRevenue || 0;
+        res.send({
+          totalBooks,
+          totalOrders,
+          shippedOrders,
+          totalRevenue,
+          pendingOrders,
+          deliveredOrders,
+          cancelledOrders,
+        });
+      }
+    );
 
     //user related api
     app.post("/user", async (req, res) => {
@@ -203,7 +221,7 @@ async function run() {
       const alreadyExists = await usersCollection.findOne({
         email: userData.email,
       });
-     // console.log("userAlreadyExists", !!alreadyExists);
+      // console.log("userAlreadyExists", !!alreadyExists);
       if (alreadyExists) {
         // console.log("update user info.....");
         const result = await usersCollection.updateOne(query, {
@@ -220,20 +238,19 @@ async function run() {
     });
 
     //update user data
-    app.patch('/update-user-data/:email', async (req, res) => {
+    app.patch("/update-user-data/:email", async (req, res) => {
       const email = req.params.email;
-      const { name, image} = req.body;
-     const updateDoc = {};
-     if (name) updateDoc.name = name;
-     if (image) updateDoc.image = image;
+      const { name, image } = req.body;
+      const updateDoc = {};
+      if (name) updateDoc.name = name;
+      if (image) updateDoc.image = image;
 
-     const result = await usersCollection.updateOne(
-       { email },
-       { $set: updateDoc }
-     );
+      const result = await usersCollection.updateOne(
+        { email },
+        { $set: updateDoc }
+      );
       res.send(result);
     });
-
 
     //get a users role
     app.get("/user/role", verifyJWT, async (req, res) => {
@@ -244,21 +261,25 @@ async function run() {
     });
 
     //get all users
-    app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
+    app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
       const adminEmail = req.tokenEmail;
-      const result = await usersCollection.find({email: {$ne: adminEmail}}).toArray();
+      const result = await usersCollection
+        .find({ email: { $ne: adminEmail } })
+        .toArray();
       res.send(result);
-    })
+    });
 
     //update user role
-    app.patch('/update-role', verifyJWT, verifyAdmin, async (req, res) => {
-     
-      const {email, role } = req.body;
-      const result = await usersCollection.updateOne({email}, {
-        $set: {role},
-      })
+    app.patch("/update-role", verifyJWT, verifyAdmin, async (req, res) => {
+      const { email, role } = req.body;
+      const result = await usersCollection.updateOne(
+        { email },
+        {
+          $set: { role },
+        }
+      );
       res.send(result);
-    })
+    });
 
     //add book
     app.post("/books", verifyJWT, verifyLibrarian, async (req, res) => {
@@ -331,8 +352,8 @@ async function run() {
       res.send({ url: session.url });
     });
 
-  //payment success api
-    app.post("/payment-success",  async (req, res) => {
+    //payment success api
+    app.post("/payment-success", async (req, res) => {
       const { sessionId } = req.body;
 
       const session = await stripe.checkout.sessions.retrieve(sessionId);
@@ -360,10 +381,8 @@ async function run() {
     //payment history
     app.get("/payments", verifyJWT, verifyCustomer, async (req, res) => {
       const email = req.tokenEmail;
-      const query = { 'customer.email': email, paymentStatus: "paid"} 
-      const result = await ordersCollection
-        .find(query)
-        .toArray();
+      const query = { "customer.email": email, paymentStatus: "paid" };
+      const result = await ordersCollection.find(query).toArray();
       res.send(result);
     });
 
@@ -405,77 +424,109 @@ async function run() {
     });
 
     //get all books of a librarian
-    app.get("/my-inventory/:email", verifyJWT, verifyLibrarian, async (req, res) => {
-      const email = req.params.email;
-      const result = await booksCollection
-        .find({ "librarian.email": email })
-        .toArray();
-      res.send(result);
-    });
+    app.get(
+      "/my-inventory/:email",
+      verifyJWT,
+      verifyLibrarian,
+      async (req, res) => {
+        const email = req.params.email;
+        const result = await booksCollection
+          .find({ "librarian.email": email })
+          .toArray();
+        res.send(result);
+      }
+    );
 
     //get all books for a admin
-    app.get('/admin-inventory', verifyJWT, verifyAdmin, async (req, res) => {
+    app.get("/admin-inventory", verifyJWT, verifyAdmin, async (req, res) => {
       const result = await booksCollection.find().toArray();
       res.send(result);
-    })
+    });
 
     //admin delete any book
-    app.delete('/admin-inventory/book/:id', verifyJWT, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-      const result = await booksCollection.deleteOne({ _id: new ObjectId(id) });
-      res.send(result);
-    })
+    app.delete(
+      "/admin-inventory/book/:id",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const result = await booksCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        res.send(result);
+      }
+    );
 
     //change book status
-    app.patch("/update-status/:id", verifyJWT, verifyAdmin, async (req, res) => { 
-      const { id } = req.params;
-      const { status } = req.body;
-      const query = { _id: new ObjectId(id) };
-      const result = await booksCollection.updateOne(query, {
-        $set: { status },
-      });
-      res.send(result);
-    });
+    app.patch(
+      "/update-status/:id",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const { status } = req.body;
+        const query = { _id: new ObjectId(id) };
+        const result = await booksCollection.updateOne(query, {
+          $set: { status },
+        });
+        res.send(result);
+      }
+    );
 
     //get book for edit
-    app.get("/my-inventory/book/:id", verifyJWT, verifyLibrarian, async (req, res) => {
-      const id = req.params.id;
-      const result = await booksCollection.findOne({
-        _id: new ObjectId(id),
-      });
-      res.send(result);
-    });
+    app.get(
+      "/my-inventory/book/:id",
+      verifyJWT,
+      verifyLibrarian,
+      async (req, res) => {
+        const id = req.params.id;
+        const result = await booksCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        res.send(result);
+      }
+    );
 
     //update book data
-    app.patch("/my-inventory/book/:id", verifyJWT, verifyLibrarian, async (req, res) => {
-      const { id } = req.params;
-      const updatedBook = req.body;
-      const query = { _id: new ObjectId(id) };
-      const result = await booksCollection.updateOne(query, {
-        $set: {
-          title: updatedBook.title,
-          author: updatedBook.author,
-          price: updatedBook.price,
-          status: updatedBook.status,
-          description: updatedBook.description,
-          image: updatedBook.image,
-          updatedAt: updatedBook.updatedAt,
-          category: updatedBook.category,
-          quantity: updatedBook.quantity,
-          tags: updatedBook.tags,
-        },
-      });
-      res.send(result);
-    });
+    app.patch(
+      "/my-inventory/book/:id",
+      verifyJWT,
+      verifyLibrarian,
+      async (req, res) => {
+        const { id } = req.params;
+        const updatedBook = req.body;
+        const query = { _id: new ObjectId(id) };
+        const result = await booksCollection.updateOne(query, {
+          $set: {
+            title: updatedBook.title,
+            author: updatedBook.author,
+            price: updatedBook.price,
+            status: updatedBook.status,
+            description: updatedBook.description,
+            image: updatedBook.image,
+            updatedAt: updatedBook.updatedAt,
+            category: updatedBook.category,
+            quantity: updatedBook.quantity,
+            tags: updatedBook.tags,
+          },
+        });
+        res.send(result);
+      }
+    );
 
     //get all orders of a librarian
-    app.get("/manage-orders/:email", verifyJWT, verifyLibrarian, async (req, res) => {
-      const email = req.params.email;
-      const result = await ordersCollection
-        .find({ "librarian.email": email })
-        .toArray();
-      res.send(result);
-    });
+    app.get(
+      "/manage-orders/:email",
+      verifyJWT,
+      verifyLibrarian,
+      async (req, res) => {
+        const email = req.params.email;
+        const result = await ordersCollection
+          .find({ "librarian.email": email })
+          .toArray();
+        res.send(result);
+      }
+    );
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
