@@ -19,13 +19,9 @@ admin.initializeApp({
 //middleware here
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "https://book2-door-client.vercel.app",
-      process.env.CLIENT_URL,
-    ].filter(Boolean), 
+    origin: [process.env.CLIENT_URL],
     credentials: true,
+    optionSuccessStatus: 200,
   })
 );
 
