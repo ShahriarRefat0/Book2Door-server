@@ -1,11 +1,23 @@
-require("dotenv").config();
 const express = require("express");
+require("dotenv").config();
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const app = express();
 const stripe = require("stripe")(process.env.STRIPE_KEY);
-const port = process.env.PORT || 3000;
+
 const admin = require("firebase-admin");
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+//middleware here
+app.use(
+  cors({
+    origin: ["https://book2-door-client.vercel.app", "http://localhost:5173"],
+    credentials: true,
+  })
+);
+
+app.use(express.json());
 
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
   "utf-8"
@@ -15,37 +27,6 @@ const serviceAccount = JSON.parse(decoded);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
-
-//middleware here
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  const allowedOrigins = [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "https://book2-door-client.vercel.app",
-  ];
-
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
-  );
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
-  next();
-});
-
-
-
-app.use(express.json());
 
 // jwt middlewares
 const verifyJWT = async (req, res, next) => {
@@ -319,21 +300,24 @@ async function run() {
       res.send(result);
     });
 
+    // get latest books
+    app.get("/latest-books", async (req, res) => {
+      try {
+        const { status } = req.query;
 
-    //latest books api
-    // app.get("/latest-books", async (req, res) => {
-    //   const { status } = req.query;
+        const query = status ? { status } : {};
 
-    //   const query = status ? { status } : {};
+        const result = await booksCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .limit(4)
+          .toArray();
 
-    //   const result = await booksCollection
-    //     .find(query)
-    //     .sort({ createdAt: -1 })
-    //     .limit(4)
-    //     .toArray();
-
-    //   res.send(result);
-    // });
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch latest books" });
+      }
+    });
 
     //get book details
     app.get("/books/:id", verifyJWT, async (req, res) => {
@@ -369,8 +353,8 @@ async function run() {
           bookId: paymentInfo?.bookId,
           customer: paymentInfo?.customer.email,
         },
-        success_url: `${process.env.BASE_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.BASE_URL}/books/${paymentInfo?.bookId}`,
+        success_url: `${process.env.CLIENT_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.CLIENT_URL}/books/${paymentInfo?.bookId}`,
       });
 
       res.send({ url: session.url });
