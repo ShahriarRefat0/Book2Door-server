@@ -17,13 +17,33 @@ admin.initializeApp({
 });
 
 //middleware here
-app.use(
-  cors({
-    origin: [process.env.CLIENT_URL],
-    credentials: true,
-    optionSuccessStatus: 200,
-  })
-);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "https://book2-door-client.vercel.app",
+  ];
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
+  next();
+});
+
+
 
 app.use(express.json());
 
@@ -299,19 +319,21 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/latest-books/", async (req, res) => {
-      const { status } = req.query;
 
-      const query = status ? { status } : {};
+    //latest books api
+    // app.get("/latest-books", async (req, res) => {
+    //   const { status } = req.query;
 
-      const result = await booksCollection
-        .find(query)
-        .sort({ createdAt: -1 })
-        .limit(4)
-        .toArray();
+    //   const query = status ? { status } : {};
 
-      res.send(result);
-    });
+    //   const result = await booksCollection
+    //     .find(query)
+    //     .sort({ createdAt: -1 })
+    //     .limit(4)
+    //     .toArray();
+
+    //   res.send(result);
+    // });
 
     //get book details
     app.get("/books/:id", verifyJWT, async (req, res) => {
