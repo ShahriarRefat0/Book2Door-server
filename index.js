@@ -328,7 +328,7 @@ async function run() {
     });
 
     //PAYMENT INTEGRATION
-    app.post("/create-checkout-session", verifyJWT, async (req, res) => {
+    app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
 
       const session = await stripe.checkout.sessions.create({
@@ -364,6 +364,7 @@ async function run() {
     app.post("/payment-success", async (req, res) => {
       const { sessionId } = req.body;
 
+      console.log("Verifying payment for session ID:", sessionId);
       const session = await stripe.checkout.sessions.retrieve(sessionId);
 
       if (session.payment_status !== "paid") {
