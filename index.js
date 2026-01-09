@@ -31,15 +31,15 @@ admin.initializeApp({
 // jwt middlewares
 const verifyJWT = async (req, res, next) => {
   const token = req?.headers?.authorization?.split(" ")[1];
-  console.log(token);
+  // console.log(token);
   if (!token) return res.status(401).send({ message: "Unauthorized Access!" });
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     req.tokenEmail = decoded.email;
-    console.log(decoded);
+    // console.log(decoded);
     next();
   } catch (err) {
-    console.log(err);
+    // console.log(err);
     return res.status(401).send({ message: "Unauthorized Access!", err });
   }
 };
@@ -364,7 +364,7 @@ async function run() {
     app.post("/payment-success", async (req, res) => {
       const { sessionId } = req.body;
 
-      console.log("Verifying payment for session ID:", sessionId);
+      //console.log("Verifying payment for session ID:", sessionId);
       const session = await stripe.checkout.sessions.retrieve(sessionId);
 
       if (session.payment_status !== "paid") {
@@ -459,10 +459,14 @@ async function run() {
       verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
-        const result = await booksCollection.deleteOne({
+        const bookID = id.toString();
+        const orderResult = await ordersCollection.deleteMany({
+          bookId: bookID,
+        });
+        const bookResult = await booksCollection.deleteOne({
           _id: new ObjectId(id),
         });
-        res.send(result);
+        res.send({ orderResult, bookResult });
       }
     );
 
