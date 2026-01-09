@@ -293,12 +293,34 @@ async function run() {
     });
 
     //books related api
-    app.get("/books", async (req, res) => {
-      const { status } = req.query;
-      const query = status ? { status: status } : {};
-      const result = await booksCollection.find(query).toArray();
-      res.send(result);
-    });
+app.get("/books", async (req, res) => {
+  try {
+    const { status, category, page = 1, limit = 12 } = req.query;
+
+    const query = {};
+
+    if (status) query.status = status;
+    if (category) query.category = category;
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const books = await booksCollection
+      .find(query)
+      .project({ description: 0 })
+      .skip(skip)
+      .limit(Number(limit))
+      .toArray();
+
+    const total = await booksCollection.countDocuments(query);
+
+    res.send({ books, total });
+  } catch (error) {
+    console.error("BOOK FILTER ERROR:", error);
+    res.status(500).send({ message: "Failed to fetch books" });
+  }
+});
+
+
 
     // get latest books
     app.get("/latest-books", async (req, res) => {
@@ -320,13 +342,14 @@ async function run() {
     });
 
     //get book details
-    app.get("/books/:id", verifyJWT, async (req, res) => {
+    app.get("/books/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await booksCollection.findOne(query);
       res.send(result);
     });
 
+    
     //PAYMENT INTEGRATION
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
